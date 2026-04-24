@@ -145,11 +145,12 @@ OTU_taxonomy <- loaded$OTU_taxonomy  # features x 7
 # METADATA
 # ---------------------------------------------------------------------------
 message("Loading metadata: ", opt$meta_table)
-meta_table <- tryCatch(
-  read.csv(opt$meta_table, header = TRUE, row.names = 1, check.names = FALSE,
-           stringsAsFactors = FALSE),
-  error = function(e) stop("Failed to read metadata: ", conditionMessage(e))
-)
+meta_table <- tryCatch({
+  dt <- fread(opt$meta_table, header = TRUE, check.names = FALSE)
+  df <- as.data.frame(dt, stringsAsFactors = FALSE)
+  rownames(df) <- df[[1]]
+  df[, -1, drop = FALSE]
+}, error = function(e) stop("Failed to read metadata: ", conditionMessage(e)))
 
 # ---------------------------------------------------------------------------
 # LIBRARY SIZE FILTER
