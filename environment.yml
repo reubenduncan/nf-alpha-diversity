@@ -1,0 +1,18 @@
+name: alpha-diversity
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+
+dependencies:
+  # Runtime
+  - r-base>=4.2.0
+  - r-optparse
+  - r-stringr
+  - r-data.table
+  - r-vegan
+  - bioconductor-phyloseq
+  - r-arrow
+
+  # Pipeline orchestration
+  - nextflow>=23.04

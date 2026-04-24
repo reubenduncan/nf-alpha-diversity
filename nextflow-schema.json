@@ -1,0 +1,231 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema",
+    "$id": "https://github.com/reubenduncan/ecologyflow/tree/main/projects/alpha-diversity/nextflow-schema.json",
+    "title": "Alpha Diversity Pipeline — Parameters",
+    "description": "Nextflow schema for the alpha diversity analysis pipeline.",
+    "type": "object",
+    "definitions": {
+        "input_output_options": {
+            "title": "Input / Output Options",
+            "type": "object",
+            "fa_icon": "fas fa-terminal",
+            "description": "Define input files and output destinations.",
+            "required": ["feature_table", "meta_table"],
+            "properties": {
+                "feature_table": {
+                    "type": "string",
+                    "format": "file-path",
+                    "description": "Path to the feature table. Accepted formats: BIOM (.biom), TSV, or GTDB TSV.",
+                    "help_text": "When input_format is 'biom' this must be a BIOM file. For 'tsv' or 'gtdb' this must be a tab-separated file with feature IDs as row names and sample IDs as column headers (or vice-versa — orientation is auto-detected).",
+                    "fa_icon": "fas fa-file"
+                },
+                "meta_table": {
+                    "type": "string",
+                    "format": "file-path",
+                    "description": "Path to sample metadata CSV. First column must contain sample IDs that match those in the feature table.",
+                    "help_text": "Rows are samples, columns are metadata variables. The first column is used as row names.",
+                    "fa_icon": "fas fa-file-csv"
+                },
+                "taxonomy_table": {
+                    "type": "string",
+                    "format": "file-path",
+                    "default": "",
+                    "description": "Path to a two-column TSV: col 1 = feature ID, col 2 = semicolon-separated taxonomy string.",
+                    "help_text": "Required when input_format is 'tsv' or 'gtdb'. Ignored when input_format is 'biom' (taxonomy is embedded). Supports SILVA (D_0__, D_1__, …) and GTDB (d__, p__, …) prefixes.",
+                    "fa_icon": "fas fa-list"
+                },
+                "tree_file": {
+                    "type": "string",
+                    "format": "file-path",
+                    "default": "",
+                    "description": "Optional phylogenetic tree file. Accepted for API consistency but not used in alpha diversity calculations.",
+                    "help_text": "Provide a Newick-format tree if required by downstream workflows. Has no effect on current outputs.",
+                    "fa_icon": "fas fa-tree"
+                },
+                "input_format": {
+                    "type": "string",
+                    "default": "biom",
+                    "description": "Format of the input feature table.",
+                    "help_text": "biom: phyloseq import_biom(); tsv: tab-separated with SILVA-style taxonomy; gtdb: tab-separated with GTDB-style taxonomy prefixes.",
+                    "enum": ["biom", "tsv", "gtdb"],
+                    "fa_icon": "fas fa-file-import"
+                },
+                "output_dir": {
+                    "type": "string",
+                    "default": "${projectDir}/results",
+                    "description": "Directory where output CSV files are written.",
+                    "fa_icon": "fas fa-folder-open"
+                },
+                "scripts_dir": {
+                    "type": "string",
+                    "default": "/opt/ecology-scripts",
+                    "description": "Path to the root of the ecology-scripts repository inside the container.",
+                    "help_text": "The R scripts are resolved relative to this path as scripts_dir/src/R/.",
+                    "fa_icon": "fas fa-code"
+                }
+            }
+        },
+        "filtering_options": {
+            "title": "Filtering Options",
+            "type": "object",
+            "fa_icon": "fas fa-filter",
+            "description": "Control sample and feature filtering applied before analysis.",
+            "properties": {
+                "min_library_size": {
+                    "type": "integer",
+                    "default": 5000,
+                    "minimum": 1,
+                    "description": "Minimum total read count per sample. Samples below this threshold are dropped.",
+                    "help_text": "Set lower for low-depth datasets (e.g. 1000) or higher for strict quality control.",
+                    "fa_icon": "fas fa-sliders-h"
+                },
+                "exclude_column": {
+                    "type": "string",
+                    "default": "",
+                    "description": "Metadata column used to exclude samples. Pairs with exclude_values.",
+                    "help_text": "Leave empty to skip sample exclusion.",
+                    "fa_icon": "fas fa-ban"
+                },
+                "exclude_values": {
+                    "type": "string",
+                    "default": "",
+                    "description": "Comma-separated values in exclude_column that identify samples to remove.",
+                    "help_text": "Example: 'control,blank'. Only applied when exclude_column is also set.",
+                    "fa_icon": "fas fa-ban"
+                }
+            }
+        },
+        "grouping_options": {
+            "title": "Grouping Options",
+            "type": "object",
+            "fa_icon": "fas fa-object-group",
+            "description": "Define how samples are grouped for statistical comparisons and output annotation.",
+            "properties": {
+                "groups_column": {
+                    "type": "string",
+                    "default": "",
+                    "description": "Metadata column used as the primary grouping variable (Groups).",
+                    "help_text": "Mutually exclusive with groups_paste_columns. If neither is specified all samples are assigned to group 'All'.",
+                    "fa_icon": "fas fa-layer-group"
+                },
+                "groups_paste_columns": {
+                    "type": "string",
+                    "default": "",
+                    "description": "Comma-separated metadata columns pasted together (space-joined) to form the Groups variable.",
+                    "help_text": "Example: 'Site,Treatment' would create groups like 'SiteA Treatment1'. Takes precedence over groups_column when both are provided.",
+                    "fa_icon": "fas fa-layer-group"
+                },
+                "type_column": {
+                    "type": "string",
+                    "default": "",
+                    "description": "Metadata column for sample Type. Included in output CSVs.",
+                    "fa_icon": "fas fa-tag"
+                },
+                "type2_column": {
+                    "type": "string",
+                    "default": "",
+                    "description": "Metadata column for a secondary Type2 grouping. Included in output CSVs.",
+                    "fa_icon": "fas fa-tags"
+                },
+                "type2_levels": {
+                    "type": "string",
+                    "default": "",
+                    "description": "Comma-separated ordered factor levels for the Type2 variable.",
+                    "help_text": "When provided, Type2 is treated as an ordered factor with these levels. Example: 'low,medium,high'.",
+                    "fa_icon": "fas fa-sort-amount-up"
+                },
+                "connections_column": {
+                    "type": "string",
+                    "default": "",
+                    "description": "Metadata column identifying paired/repeated-measures connections between samples.",
+                    "help_text": "When specified, ANOVA uses a within-subject Error() term: value ~ Groups + Error(Connections/Groups).",
+                    "fa_icon": "fas fa-link"
+                }
+            }
+        },
+        "alpha_diversity_options": {
+            "title": "Alpha Diversity Options",
+            "type": "object",
+            "fa_icon": "fas fa-chart-bar",
+            "description": "Control taxonomy collation, metric selection, and statistical testing.",
+            "properties": {
+                "which_level": {
+                    "type": "string",
+                    "default": "Phylum",
+                    "description": "Taxonomic level at which features are collapsed before diversity calculation.",
+                    "help_text": "Use 'Otus' to work at the ASV/OTU level with no collation.",
+                    "enum": ["Otus", "Genus", "Family", "Order", "Class", "Phylum"],
+                    "fa_icon": "fas fa-sitemap"
+                },
+                "label": {
+                    "type": "string",
+                    "default": "analysis",
+                    "description": "Label appended to output filenames. Must be a valid filename component.",
+                    "help_text": "Example: 'Hypothesis1' produces Diversity_Phylum_Hypothesis1.csv.",
+                    "fa_icon": "fas fa-tag"
+                },
+                "alpha_metrics": {
+                    "type": "string",
+                    "default": "Richness,Shannon,Simpson,FisherAlpha,PielouEvenness",
+                    "description": "Comma-separated list of alpha diversity metrics to compute.",
+                    "help_text": "Available metrics: Richness (rarefied species richness via vegan::rarefy), Shannon (vegan::diversity index='shannon'), Simpson (vegan::diversity index='simpson'), InvSimpson (vegan::diversity index='invsimpson'), FisherAlpha (vegan::fisher.alpha), Chao1 (vegan::estimateR S.chao1), PielouEvenness (Shannon / ln(S)). Example: 'Shannon,Chao1,PielouEvenness'.",
+                    "fa_icon": "fas fa-list-ol"
+                },
+                "test_method": {
+                    "type": "string",
+                    "default": "anova",
+                    "description": "Statistical test used for pairwise group comparisons.",
+                    "help_text": "anova: one-way ANOVA (or within-subjects ANOVA when connections_column is set). kruskal: Kruskal-Wallis rank-sum test (non-parametric). none: skip statistical testing and write an empty pairwise CSV.",
+                    "enum": ["anova", "kruskal", "none"],
+                    "fa_icon": "fas fa-flask"
+                },
+                "p_adjust_method": {
+                    "type": "string",
+                    "default": "BH",
+                    "description": "Method for multiple-testing correction of pairwise p-values.",
+                    "help_text": "Applied per metric across all pairwise comparisons using R's p.adjust(). BH (Benjamini-Hochberg) and fdr are equivalent. Use 'none' to report unadjusted p-values.",
+                    "enum": ["BH", "bonferroni", "holm", "fdr", "none"],
+                    "fa_icon": "fas fa-adjust"
+                }
+            }
+        },
+        "institutional_config_options": {
+            "title": "Institutional Config Options",
+            "type": "object",
+            "fa_icon": "fas fa-university",
+            "description": "Parameters for institutional or HPC-specific configuration.",
+            "properties": {
+                "custom_config_base": {
+                    "type": "string",
+                    "default": "https://raw.githubusercontent.com/nf-core/configs/master",
+                    "description": "Base URL or path to nf-core/configs institutional configuration files.",
+                    "hidden": true,
+                    "fa_icon": "fas fa-users-cog"
+                }
+            }
+        },
+        "output_options": {
+            "title": "Output Options",
+            "type": "object",
+            "fa_icon": "fas fa-file-export",
+            "description": "Additional output formats produced after all analyses complete.",
+            "properties": {
+                "merge_parquet": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Merge all output CSVs into a single Parquet file with analysis and table metadata columns.",
+                    "help_text": "Writes alpha_diversity_{label}.parquet to output_dir. Filter by 'analysis' and 'table' columns downstream.",
+                    "fa_icon": "fas fa-file-archive"
+                }
+            }
+        }
+    },
+    "allOf": [
+        { "$ref": "#/definitions/input_output_options" },
+        { "$ref": "#/definitions/filtering_options" },
+        { "$ref": "#/definitions/grouping_options" },
+        { "$ref": "#/definitions/alpha_diversity_options" },
+        { "$ref": "#/definitions/institutional_config_options" },
+        { "$ref": "#/definitions/output_options" }
+    ]
+}
