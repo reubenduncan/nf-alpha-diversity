@@ -101,45 +101,17 @@
             "fa_icon": "fas fa-object-group",
             "description": "Define how samples are grouped for statistical comparisons and output annotation.",
             "properties": {
-                "groups_column": {
+                "group": {
                     "type": "string",
                     "default": "",
-                    "description": "Metadata column used as the primary grouping variable (Groups).",
-                    "help_text": "Mutually exclusive with groups_paste_columns. If neither is specified all samples are assigned to group 'All'.",
+                    "description": "One metadata column, or comma-separated columns to paste together as the group label.",
                     "fa_icon": "fas fa-layer-group"
                 },
-                "groups_paste_columns": {
+                "type": {
                     "type": "string",
                     "default": "",
-                    "description": "Comma-separated metadata columns pasted together (space-joined) to form the Groups variable.",
-                    "help_text": "Example: 'Site,Treatment' would create groups like 'SiteA Treatment1'. Takes precedence over groups_column when both are provided.",
-                    "fa_icon": "fas fa-layer-group"
-                },
-                "type_column": {
-                    "type": "string",
-                    "default": "",
-                    "description": "Metadata column for sample Type. Included in output CSVs.",
-                    "fa_icon": "fas fa-tag"
-                },
-                "type2_column": {
-                    "type": "string",
-                    "default": "",
-                    "description": "Metadata column for a secondary Type2 grouping. Included in output CSVs.",
-                    "fa_icon": "fas fa-tags"
-                },
-                "type2_levels": {
-                    "type": "string",
-                    "default": "",
-                    "description": "Comma-separated ordered factor levels for the Type2 variable.",
-                    "help_text": "When provided, Type2 is treated as an ordered factor with these levels. Example: 'low,medium,high'.",
-                    "fa_icon": "fas fa-sort-amount-up"
-                },
-                "connections_column": {
-                    "type": "string",
-                    "default": "",
-                    "description": "Metadata column identifying paired/repeated-measures connections between samples.",
-                    "help_text": "When specified, ANOVA uses a within-subject Error() term: value ~ Groups + Error(Connections/Groups).",
-                    "fa_icon": "fas fa-link"
+                    "description": "One metadata column, or comma-separated columns to paste together as the point-style label (optional).",
+                    "fa_icon": "fas fa-shapes"
                 }
             }
         },

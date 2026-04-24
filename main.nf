@@ -25,15 +25,11 @@ process ALPHA_DIVERSITY {
     path "Diversity_pairwise_${params.which_level}_${params.label}.csv", emit: pairwise_csv
 
     script:
-    def tax_arg          = params.taxonomy_table  ? "--taxonomy_table '${params.taxonomy_table}'"  : ""
-    def excl_col_arg     = params.exclude_column  ? "--exclude_column '${params.exclude_column}'"  : ""
-    def excl_val_arg     = params.exclude_values  ? "--exclude_values '${params.exclude_values}'"  : ""
-    def grp_col_arg      = params.groups_column   ? "--groups_column '${params.groups_column}'"    : ""
-    def grp_paste_arg    = params.groups_paste_columns ? "--groups_paste_columns '${params.groups_paste_columns}'" : ""
-    def type_col_arg     = params.type_column     ? "--type_column '${params.type_column}'"        : ""
-    def type2_col_arg    = params.type2_column    ? "--type2_column '${params.type2_column}'"      : ""
-    def type2_lvl_arg    = params.type2_levels    ? "--type2_levels '${params.type2_levels}'"      : ""
-    def conn_col_arg     = params.connections_column ? "--connections_column '${params.connections_column}'" : ""
+    def tax_arg      = params.taxonomy_table ? "--taxonomy_table '${params.taxonomy_table}'" : ""
+    def excl_col_arg = params.exclude_column ? "--exclude_column '${params.exclude_column}'" : ""
+    def excl_val_arg = params.exclude_values ? "--exclude_values '${params.exclude_values}'" : ""
+    def grp_arg      = params.group          ? "--group '${params.group}'"                   : ""
+    def type_arg     = params.type           ? "--type  '${params.type}'"                    : ""
 
     """
     Rscript ${projectDir}/src/R/alpha_diversity.R \\
@@ -50,12 +46,8 @@ process ALPHA_DIVERSITY {
         ${tax_arg}      \\
         ${excl_col_arg} \\
         ${excl_val_arg} \\
-        ${grp_col_arg}  \\
-        ${grp_paste_arg}\\
-        ${type_col_arg} \\
-        ${type2_col_arg}\\
-        ${type2_lvl_arg}\\
-        ${conn_col_arg}
+        ${grp_arg}      \\
+        ${type_arg}
     """
 }
 

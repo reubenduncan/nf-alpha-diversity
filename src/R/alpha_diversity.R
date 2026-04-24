@@ -60,18 +60,10 @@ option_list <- list(
               help = "Comma-separated values to exclude from exclude_column"),
 
   # Grouping
-  make_option("--groups_column",         type = "character", default = "",
-              help = "Metadata column to use as Groups"),
-  make_option("--groups_paste_columns",  type = "character", default = "",
-              help = "Comma-separated columns to paste together as Groups"),
-  make_option("--type_column",           type = "character", default = "",
-              help = "Metadata column for Type (point shape)"),
-  make_option("--type2_column",          type = "character", default = "",
-              help = "Metadata column for Type2 (secondary grouping)"),
-  make_option("--type2_levels",          type = "character", default = "",
-              help = "Comma-separated ordered factor levels for Type2"),
-  make_option("--connections_column",    type = "character", default = "",
-              help = "Metadata column for paired-sample connections"),
+  make_option("--group", type = "character", default = "",
+              help = "One metadata column, or comma-separated columns to paste as the group label"),
+  make_option("--type",  type = "character", default = "",
+              help = "One metadata column, or comma-separated columns to paste as the point-style label (optional)"),
 
   # Alpha diversity
   make_option("--alpha_metrics",    type = "character",
@@ -214,52 +206,29 @@ if (opt$exclude_column != "" && opt$exclude_values != "") {
 # ---------------------------------------------------------------------------
 # GROUPING
 # ---------------------------------------------------------------------------
-if (opt$groups_paste_columns != "") {
-  paste_cols <- trimws(strsplit(opt$groups_paste_columns, ",")[[1]])
-  missing_pc <- setdiff(paste_cols, colnames(meta_table))
-  if (length(missing_pc) > 0)
-    stop("groups_paste_columns references columns not in metadata: ",
-         paste(missing_pc, collapse = ", "))
-  meta_table$Groups <- as.factor(
-    do.call(paste, c(meta_table[, paste_cols, drop = FALSE], sep = " "))
-  )
-} else if (opt$groups_column != "") {
-  if (!opt$groups_column %in% colnames(meta_table))
-    stop("groups_column '", opt$groups_column, "' not found in metadata columns.")
-  meta_table$Groups <- as.factor(as.character(meta_table[[opt$groups_column]]))
+resolve_columns <- function(param_val, param_name, meta) {
+  cols <- trimws(strsplit(param_val, ",")[[1]])
+  missing <- setdiff(cols, colnames(meta))
+  if (length(missing) > 0)
+    stop(param_name, " references columns not in metadata: ", paste(missing, collapse = ", "))
+  if (length(cols) == 1) {
+    as.factor(as.character(meta[[cols]]))
+  } else {
+    as.factor(do.call(paste, c(meta[, cols, drop = FALSE], sep = " ")))
+  }
+}
+
+if (opt$group != "") {
+  meta_table$Groups <- resolve_columns(opt$group, "--group", meta_table)
 } else {
   meta_table$Groups <- factor(rep("All", nrow(meta_table)))
-  message("No groups_column specified — all samples assigned to group 'All'.")
+  message("No --group specified — all samples assigned to group 'All'.")
 }
 
-if (opt$type_column != "") {
-  if (!opt$type_column %in% colnames(meta_table))
-    stop("type_column '", opt$type_column, "' not found in metadata columns.")
-  meta_table$Type <- as.factor(as.character(meta_table[[opt$type_column]]))
+if (opt$type != "") {
+  meta_table$Type <- resolve_columns(opt$type, "--type", meta_table)
 } else {
   meta_table$Type <- NULL
-}
-
-if (opt$type2_column != "") {
-  if (!opt$type2_column %in% colnames(meta_table))
-    stop("type2_column '", opt$type2_column, "' not found in metadata columns.")
-  meta_table$Type2 <- as.character(meta_table[[opt$type2_column]])
-  if (opt$type2_levels != "") {
-    lvls <- trimws(strsplit(opt$type2_levels, ",")[[1]])
-    meta_table$Type2 <- factor(meta_table$Type2, levels = lvls)
-  } else {
-    meta_table$Type2 <- as.factor(meta_table$Type2)
-  }
-} else {
-  meta_table$Type2 <- NULL
-}
-
-if (opt$connections_column != "") {
-  if (!opt$connections_column %in% colnames(meta_table))
-    stop("connections_column '", opt$connections_column, "' not found in metadata columns.")
-  meta_table$Connections <- as.character(meta_table[[opt$connections_column]])
-} else {
-  meta_table$Connections <- NULL
 }
 
 abund_table  <- abund_table[rownames(meta_table), , drop = FALSE]
@@ -399,8 +368,6 @@ for (metric in requested_metrics) {
 wide_df$Groups <- meta_table[rownames(wide_df), "Groups"]
 if (!is.null(meta_table$Type))
   wide_df$Type  <- meta_table[rownames(wide_df), "Type"]
-if (!is.null(meta_table$Type2))
-  wide_df$Type2 <- meta_table[rownames(wide_df), "Type2"]
 # Add sample as explicit column (first col)
 wide_df <- cbind(sample = rownames(wide_df), wide_df)
 
@@ -415,18 +382,12 @@ message("Wrote wide CSV: ", wide_csv)
 df_long$Groups <- meta_table[df_long$sample, "Groups"]
 if (!is.null(meta_table$Type))
   df_long$Type  <- meta_table[df_long$sample, "Type"]
-if (!is.null(meta_table$Type2))
-  df_long$Type2 <- meta_table[df_long$sample, "Type2"]
-if (!is.null(meta_table$Connections))
-  df_long$Connections <- meta_table[df_long$sample, "Connections"]
 
 # ---------------------------------------------------------------------------
 # CSV 2: Long diversity table
 # ---------------------------------------------------------------------------
 long_cols <- c("sample", "value", "measure", "Groups")
-if (!is.null(meta_table$Type))        long_cols <- c(long_cols, "Type")
-if (!is.null(meta_table$Type2))       long_cols <- c(long_cols, "Type2")
-if (!is.null(meta_table$Connections)) long_cols <- c(long_cols, "Connections")
+if (!is.null(meta_table$Type)) long_cols <- c(long_cols, "Type")
 
 long_csv <- file.path(opt$output_dir,
   paste0("Diversity_long_", which_level, "_", opt$label, ".csv"))
@@ -495,18 +456,10 @@ if (opt$test_method == "none" || n_groups < 2) {
 
       pv <- tryCatch({
         if (opt$test_method == "anova") {
-          if (!is.null(meta_table$Connections) && "Connections" %in% colnames(sub)) {
-            summary(aov(
-              as.formula(paste("value ~", grouping_column,
-                               "+ Error(Connections /", grouping_column, ")")),
-              data = sub
-            ))[[1]][[1]][["Pr(>F)"]][1]
-          } else {
-            summary(aov(
-              as.formula(paste("value ~", grouping_column)),
-              data = sub
-            ))[[1]][["Pr(>F)"]][1]
-          }
+          summary(aov(
+            as.formula(paste("value ~", grouping_column)),
+            data = sub
+          ))[[1]][["Pr(>F)"]][1]
         } else {
           # kruskal
           kt <- kruskal.test(
