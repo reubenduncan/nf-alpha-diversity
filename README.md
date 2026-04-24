@@ -28,7 +28,6 @@ nextflow run main.nf \
 | `--tree_file` | `""` | Newick tree file (accepted for API consistency; not used) |
 | `--input_format` | `biom` | `biom` \| `tsv` \| `gtdb` |
 | `--output_dir` | `results/` | Directory for output files |
-| `--scripts_dir` | `/opt/ecology-scripts` | Path to R scripts (override for local runs) |
 
 ### Filtering
 
@@ -79,18 +78,22 @@ All files are written to `--output_dir`.
 ## Requirements
 
 - [Nextflow](https://www.nextflow.io/) ≥ 23.04
-- Docker (default) **or** a local R installation with: `optparse`, `stringr`, `data.table`, `vegan`, `phyloseq`, `arrow`
+- [conda](https://docs.conda.io/) or [mamba](https://mamba.readthedocs.io/) (default executor — environment built automatically from `environment.yml`)
+- **or** Docker with `-profile docker`
+- **or** Singularity with `-profile singularity`
+- **or** a local R installation with: `optparse`, `vegan`, `stringr`, `data.table`, `phyloseq`, `arrow`
 
-## Running without Docker
+## Running with a local R installation
+
+Add `-profile` to select your execution environment (conda is used by default if no profile is specified):
 
 ```bash
 nextflow run main.nf \
   -c nextflow.config \
-  --scripts_dir "$(pwd)" \
   --feature_table /path/to/table.biom \
   --meta_table    /path/to/meta.csv \
   --groups_column Treatment \
   --label         my_analysis
 ```
 
-Add `docker.enabled = false` and `process.container = null` to a local override config, or pass them on the command line.
+Available profiles: `conda` (default), `docker`, `singularity`.

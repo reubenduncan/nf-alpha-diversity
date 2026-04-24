@@ -1,7 +1,7 @@
 {
     "$schema": "http://json-schema.org/draft-07/schema",
     "$id": "https://github.com/reubenduncan/ecologyflow/tree/main/projects/alpha-diversity/nextflow-schema.json",
-    "title": "Alpha Diversity Pipeline — Parameters",
+    "title": "Alpha Diversity Pipeline \u2014 Parameters",
     "description": "Nextflow schema for the alpha diversity analysis pipeline.",
     "type": "object",
     "definitions": {
@@ -10,13 +10,16 @@
             "type": "object",
             "fa_icon": "fas fa-terminal",
             "description": "Define input files and output destinations.",
-            "required": ["feature_table", "meta_table"],
+            "required": [
+                "feature_table",
+                "meta_table"
+            ],
             "properties": {
                 "feature_table": {
                     "type": "string",
                     "format": "file-path",
                     "description": "Path to the feature table. Accepted formats: BIOM (.biom), TSV, or GTDB TSV.",
-                    "help_text": "When input_format is 'biom' this must be a BIOM file. For 'tsv' or 'gtdb' this must be a tab-separated file with feature IDs as row names and sample IDs as column headers (or vice-versa — orientation is auto-detected).",
+                    "help_text": "When input_format is 'biom' this must be a BIOM file. For 'tsv' or 'gtdb' this must be a tab-separated file with feature IDs as row names and sample IDs as column headers (or vice-versa \u2014 orientation is auto-detected).",
                     "fa_icon": "fas fa-file"
                 },
                 "meta_table": {
@@ -31,7 +34,7 @@
                     "format": "file-path",
                     "default": "",
                     "description": "Path to a two-column TSV: col 1 = feature ID, col 2 = semicolon-separated taxonomy string.",
-                    "help_text": "Required when input_format is 'tsv' or 'gtdb'. Ignored when input_format is 'biom' (taxonomy is embedded). Supports SILVA (D_0__, D_1__, …) and GTDB (d__, p__, …) prefixes.",
+                    "help_text": "Required when input_format is 'tsv' or 'gtdb'. Ignored when input_format is 'biom' (taxonomy is embedded). Supports SILVA (D_0__, D_1__, \u2026) and GTDB (d__, p__, \u2026) prefixes.",
                     "fa_icon": "fas fa-list"
                 },
                 "tree_file": {
@@ -47,7 +50,11 @@
                     "default": "biom",
                     "description": "Format of the input feature table.",
                     "help_text": "biom: phyloseq import_biom(); tsv: tab-separated with SILVA-style taxonomy; gtdb: tab-separated with GTDB-style taxonomy prefixes.",
-                    "enum": ["biom", "tsv", "gtdb"],
+                    "enum": [
+                        "biom",
+                        "tsv",
+                        "gtdb"
+                    ],
                     "fa_icon": "fas fa-file-import"
                 },
                 "output_dir": {
@@ -55,13 +62,6 @@
                     "default": "${projectDir}/results",
                     "description": "Directory where output CSV files are written.",
                     "fa_icon": "fas fa-folder-open"
-                },
-                "scripts_dir": {
-                    "type": "string",
-                    "default": "/opt/ecology-scripts",
-                    "description": "Path to the root of the ecology-scripts repository inside the container.",
-                    "help_text": "The R scripts are resolved relative to this path as scripts_dir/src/R/.",
-                    "fa_icon": "fas fa-code"
                 }
             }
         },
@@ -154,7 +154,14 @@
                     "default": "Phylum",
                     "description": "Taxonomic level at which features are collapsed before diversity calculation.",
                     "help_text": "Use 'Otus' to work at the ASV/OTU level with no collation.",
-                    "enum": ["Otus", "Genus", "Family", "Order", "Class", "Phylum"],
+                    "enum": [
+                        "Otus",
+                        "Genus",
+                        "Family",
+                        "Order",
+                        "Class",
+                        "Phylum"
+                    ],
                     "fa_icon": "fas fa-sitemap"
                 },
                 "label": {
@@ -176,7 +183,11 @@
                     "default": "anova",
                     "description": "Statistical test used for pairwise group comparisons.",
                     "help_text": "anova: one-way ANOVA (or within-subjects ANOVA when connections_column is set). kruskal: Kruskal-Wallis rank-sum test (non-parametric). none: skip statistical testing and write an empty pairwise CSV.",
-                    "enum": ["anova", "kruskal", "none"],
+                    "enum": [
+                        "anova",
+                        "kruskal",
+                        "none"
+                    ],
                     "fa_icon": "fas fa-flask"
                 },
                 "p_adjust_method": {
@@ -184,7 +195,13 @@
                     "default": "BH",
                     "description": "Method for multiple-testing correction of pairwise p-values.",
                     "help_text": "Applied per metric across all pairwise comparisons using R's p.adjust(). BH (Benjamini-Hochberg) and fdr are equivalent. Use 'none' to report unadjusted p-values.",
-                    "enum": ["BH", "bonferroni", "holm", "fdr", "none"],
+                    "enum": [
+                        "BH",
+                        "bonferroni",
+                        "holm",
+                        "fdr",
+                        "none"
+                    ],
                     "fa_icon": "fas fa-adjust"
                 }
             }
@@ -221,11 +238,23 @@
         }
     },
     "allOf": [
-        { "$ref": "#/definitions/input_output_options" },
-        { "$ref": "#/definitions/filtering_options" },
-        { "$ref": "#/definitions/grouping_options" },
-        { "$ref": "#/definitions/alpha_diversity_options" },
-        { "$ref": "#/definitions/institutional_config_options" },
-        { "$ref": "#/definitions/output_options" }
+        {
+            "$ref": "#/definitions/input_output_options"
+        },
+        {
+            "$ref": "#/definitions/filtering_options"
+        },
+        {
+            "$ref": "#/definitions/grouping_options"
+        },
+        {
+            "$ref": "#/definitions/alpha_diversity_options"
+        },
+        {
+            "$ref": "#/definitions/institutional_config_options"
+        },
+        {
+            "$ref": "#/definitions/output_options"
+        }
     ]
 }

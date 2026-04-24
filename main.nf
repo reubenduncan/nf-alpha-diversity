@@ -36,7 +36,7 @@ process ALPHA_DIVERSITY {
     def conn_col_arg     = params.connections_column ? "--connections_column '${params.connections_column}'" : ""
 
     """
-    Rscript ${params.scripts_dir}/src/R/alpha_diversity.R \\
+    Rscript ${projectDir}/src/R/alpha_diversity.R \\
         --feature_table   '${feature_table}'             \\
         --meta_table      '${meta_table}'                \\
         --input_format    '${params.input_format}'       \\
@@ -74,7 +74,7 @@ process MERGE_PARQUET {
 
     script:
     """
-    Rscript ${params.scripts_dir}/src/R/merge_parquet.R \\
+    Rscript ${projectDir}/src/R/merge_parquet.R \\
         --label      '${params.label}' \\
         --output_dir '.'
     """
