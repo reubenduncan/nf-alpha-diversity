@@ -121,13 +121,13 @@
             "fa_icon": "fas fa-chart-bar",
             "description": "Control taxonomy collation, metric selection, and statistical testing.",
             "properties": {
-                "which_level": {
+                "taxon_rank": {
                     "type": "string",
                     "default": "Phylum",
                     "description": "Taxonomic level at which features are collapsed before diversity calculation.",
-                    "help_text": "Use 'Otus' to work at the ASV/OTU level with no collation.",
+                    "help_text": "Use 'Feature' to work at the feature level with no collation.",
                     "enum": [
-                        "Otus",
+                        "Feature",
                         "Genus",
                         "Family",
                         "Order",

@@ -2,7 +2,7 @@
 # Shared ingestion helper for alpha diversity pipeline.
 # Returns a list with:
 #   $abund_table  — samples x features numeric matrix
-#   $OTU_taxonomy — data.frame with cols Kingdom,Phylum,Class,Order,Family,Genus,Otus
+#   $feature_taxonomy — data.frame with cols Kingdom,Phylum,Class,Order,Family,Genus,Feature
 
 library(phyloseq)
 library(stringr)
@@ -14,7 +14,7 @@ library(data.table)
 # and GTDB (d__, p__, c__, o__, f__, g__, s__) prefixes.
 # ---------------------------------------------------------------------------
 .parse_tax_string <- function(tax_string) {
-  ranks  <- c("Kingdom", "Phylum", "Class", "Order", "Family", "Genus", "Otus")
+  ranks  <- c("Kingdom", "Phylum", "Class", "Order", "Family", "Genus", "Feature")
   result <- setNames(rep("", 7), ranks)
   if (is.na(tax_string) || tax_string == "") return(result)
 
@@ -41,7 +41,7 @@ library(data.table)
 
 # ---------------------------------------------------------------------------
 # Internal helper: strip rank prefixes from a taxonomy data.frame that already
-# has columns Kingdom … Otus (used after import_biom).
+# has columns Kingdom … Feature (used after import_biom).
 # ---------------------------------------------------------------------------
 .strip_tax_df_prefixes <- function(tax_df) {
   tax_df[] <- lapply(tax_df, as.character)
@@ -53,7 +53,7 @@ library(data.table)
   tax_df$Order   <- gsub("D_3__|o__", "", tax_df$Order)
   tax_df$Family  <- gsub("D_4__|f__", "", tax_df$Family)
   tax_df$Genus   <- gsub("D_5__|g__", "", tax_df$Genus)
-  tax_df$Otus    <- gsub("D_6__|s__", "", tax_df$Otus)
+  tax_df$Feature    <- gsub("D_6__|s__", "", tax_df$Feature)
   tax_df[] <- lapply(tax_df, trimws)
   tax_df
 }
@@ -71,7 +71,7 @@ library(data.table)
   if (sum(keep) == 0) stop("No features remain after taxonomy pruning.")
   abund_table <- abund_table[, keep, drop = FALSE]
   tax_df      <- tax_df[keep, , drop = FALSE]
-  list(abund_table = abund_table, OTU_taxonomy = tax_df)
+  list(abund_table = abund_table, feature_taxonomy = tax_df)
 }
 
 # ---------------------------------------------------------------------------
@@ -99,7 +99,7 @@ load_feature_table <- function(feature_table, input_format, taxonomy_table = NUL
     # Ensure samples are rows
     if (taxa_are_rows(physeq)) abund_mat <- t(abund_mat)
 
-    rank_names_std <- c("Kingdom", "Phylum", "Class", "Order", "Family", "Genus", "Otus")
+    rank_names_std <- c("Kingdom", "Phylum", "Class", "Order", "Family", "Genus", "Feature")
 
     if (inherits(physeq, "phyloseq")) {
       # Full phyloseq object — taxonomy is embedded in the BIOM
@@ -118,19 +118,19 @@ load_feature_table <- function(feature_table, input_format, taxonomy_table = NUL
       return(.prune_taxonomy(abund_mat, tax_raw))
     } else {
       # import_biom returned a bare otu_table — no taxonomy in this BIOM.
-      # Build a placeholder so downstream code can run at Otus level.
+      # Build a placeholder so downstream code can run at feature level.
       # Pruning is skipped: there are no rank strings to filter on.
       message(
-        "BIOM file has no embedded taxonomy. All features treated as OTUs. ",
-        "Use --which_level Otus, or supply a separate --taxonomy_table."
+        "BIOM file has no embedded taxonomy. All features treated as features. ",
+        "Use --taxon_rank Feature, or supply a separate --taxonomy_table."
       )
       tax_raw <- data.frame(
         matrix("", nrow = ncol(abund_mat), ncol = 7,
                dimnames = list(colnames(abund_mat), rank_names_std)),
         stringsAsFactors = FALSE
       )
-      tax_raw$Otus <- colnames(abund_mat)
-      return(list(abund_table = abund_mat, OTU_taxonomy = tax_raw))
+      tax_raw$Feature <- colnames(abund_mat)
+      return(list(abund_table = abund_mat, feature_taxonomy = tax_raw))
     }
   }
 
@@ -161,7 +161,7 @@ load_feature_table <- function(feature_table, input_format, taxonomy_table = NUL
     storage.mode(abund_mat) <- "numeric"
 
     # ---- Taxonomy table ---------------------------------------------------
-    ranks_std <- c("Kingdom", "Phylum", "Class", "Order", "Family", "Genus", "Otus")
+    ranks_std <- c("Kingdom", "Phylum", "Class", "Order", "Family", "Genus", "Feature")
 
     if (!is.null(taxonomy_table) && taxonomy_table != "" && file.exists(taxonomy_table)) {
       message("Loading taxonomy table: ", taxonomy_table)

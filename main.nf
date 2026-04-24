@@ -20,9 +20,9 @@ process ALPHA_DIVERSITY {
     path tree_file   // accepted for API consistency; not used by R script
 
     output:
-    path "Diversity_${params.which_level}_${params.label}.csv",         emit: diversity_wide
-    path "Diversity_long_${params.which_level}_${params.label}.csv",    emit: diversity_long
-    path "Diversity_pairwise_${params.which_level}_${params.label}.csv", emit: pairwise_csv
+    path "Diversity_${params.taxon_rank}_${params.label}.csv",         emit: diversity_wide
+    path "Diversity_long_${params.taxon_rank}_${params.label}.csv",    emit: diversity_long
+    path "Diversity_pairwise_${params.taxon_rank}_${params.label}.csv", emit: pairwise_csv
 
     script:
     def tax_arg      = params.taxonomy_table ? "--taxonomy_table '${params.taxonomy_table}'" : ""
@@ -37,7 +37,7 @@ process ALPHA_DIVERSITY {
         --meta_table      '${meta_table}'                \\
         --input_format    '${params.input_format}'       \\
         --output_dir      '.'                            \\
-        --which_level     '${params.which_level}'        \\
+        --taxon_rank     '${params.taxon_rank}'        \\
         --label           '${params.label}'              \\
         --min_library_size ${params.min_library_size}    \\
         --alpha_metrics   '${params.alpha_metrics}'      \\

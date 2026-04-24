@@ -48,7 +48,7 @@ nextflow run main.nf \
 
 | Parameter | Default | Description |
 |---|---|---|
-| `--which_level` | `Phylum` | Taxonomic level for feature collation (`Otus` \| `Genus` \| `Family` \| `Order` \| `Class` \| `Phylum`) |
+| `--taxon_rank` | `Phylum` | Taxonomic level for feature collation (`Feature` \| `Genus` \| `Family` \| `Order` \| `Class` \| `Phylum`) |
 | `--label` | `analysis` | Label prepended to output file names |
 | `--alpha_metrics` | `Richness,Shannon,Simpson,FisherAlpha,PielouEvenness` | Comma-separated list of metrics to compute |
 | `--test_method` | `anova` | Statistical test: `anova` \| `kruskal` \| `none` |

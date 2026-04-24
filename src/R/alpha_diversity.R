@@ -48,8 +48,8 @@ option_list <- list(
               help = "Output directory [default: .]"),
 
   # Filtering
-  make_option("--which_level",      type = "character", default = "Phylum",
-              help = "Taxonomy level: Otus Genus Family Order Class Phylum [default: Phylum]"),
+  make_option("--taxon_rank",      type = "character", default = "Phylum",
+              help = "Taxonomy level: Feature Genus Family Order Class Phylum [default: Phylum]"),
   make_option("--label",            type = "character", default = "analysis",
               help = "Analysis label used in output filenames [default: analysis]"),
   make_option("--min_library_size", type = "integer",   default = 5000L,
@@ -102,10 +102,10 @@ if (!tolower(opt$input_format) %in% valid_formats)
   stop("--input_format must be one of: ", paste(valid_formats, collapse = ", "),
        ". Got: ", opt$input_format)
 
-valid_levels <- c("Otus", "Genus", "Family", "Order", "Class", "Phylum")
-if (!opt$which_level %in% valid_levels)
-  stop("--which_level must be one of: ", paste(valid_levels, collapse = ", "),
-       ". Got: ", opt$which_level)
+valid_levels <- c("Feature", "Genus", "Family", "Order", "Class", "Phylum")
+if (!opt$taxon_rank %in% valid_levels)
+  stop("--taxon_rank must be one of: ", paste(valid_levels, collapse = ", "),
+       ". Got: ", opt$taxon_rank)
 
 valid_metrics <- c("Richness", "Shannon", "Simpson", "FisherAlpha",
                    "PielouEvenness", "Chao1", "InvSimpson")
@@ -139,7 +139,7 @@ loaded <- load_feature_table(
   taxonomy_table = tax_tbl_arg
 )
 abund_table  <- loaded$abund_table   # samples x features
-OTU_taxonomy <- loaded$OTU_taxonomy  # features x 7
+feature_taxonomy <- loaded$feature_taxonomy  # features x 7
 
 # ---------------------------------------------------------------------------
 # METADATA
@@ -168,7 +168,7 @@ if (nrow(abund_table) < 2)
 
 # Remove zero-count features
 abund_table  <- abund_table[, colSums(abund_table) > 0, drop = FALSE]
-OTU_taxonomy <- OTU_taxonomy[colnames(abund_table), , drop = FALSE]
+feature_taxonomy <- feature_taxonomy[colnames(abund_table), , drop = FALSE]
 
 # ---------------------------------------------------------------------------
 # ALIGN SAMPLES WITH METADATA
@@ -183,7 +183,7 @@ meta_table  <- meta_table[common_samps, , drop = FALSE]
 
 # Remove any features that are now zero across retained samples
 abund_table  <- abund_table[, colSums(abund_table) > 0, drop = FALSE]
-OTU_taxonomy <- OTU_taxonomy[colnames(abund_table), , drop = FALSE]
+feature_taxonomy <- feature_taxonomy[colnames(abund_table), , drop = FALSE]
 
 # ---------------------------------------------------------------------------
 # HYPOTHESIS SPACE FILTERS
@@ -199,7 +199,7 @@ if (opt$exclude_column != "" && opt$exclude_values != "") {
   meta_table  <- meta_table[keep_mask, , drop = FALSE]
   abund_table <- abund_table[rownames(meta_table), , drop = FALSE]
   abund_table <- abund_table[, colSums(abund_table) > 0, drop = FALSE]
-  OTU_taxonomy <- OTU_taxonomy[colnames(abund_table), , drop = FALSE]
+  feature_taxonomy <- feature_taxonomy[colnames(abund_table), , drop = FALSE]
   if (nrow(abund_table) < 2)
     stop("Fewer than 2 samples remain after exclusion filter.")
 }
@@ -234,21 +234,21 @@ if (opt$type != "") {
 
 abund_table  <- abund_table[rownames(meta_table), , drop = FALSE]
 abund_table  <- abund_table[, colSums(abund_table) > 0, drop = FALSE]
-OTU_taxonomy <- OTU_taxonomy[colnames(abund_table), , drop = FALSE]
+feature_taxonomy <- feature_taxonomy[colnames(abund_table), , drop = FALSE]
 
 # ---------------------------------------------------------------------------
 # COLLATE AT TAXONOMIC LEVEL
 # ---------------------------------------------------------------------------
-which_level <- opt$which_level
-message("Collating features at taxonomic level: ", which_level)
+taxon_rank <- opt$taxon_rank
+message("Collating features at taxonomic level: ", taxon_rank)
 
-if (which_level == "Otus") {
+if (taxon_rank == "Feature") {
   new_abund_table <- abund_table
 } else {
-  lvl_list        <- unique(OTU_taxonomy[, which_level])
+  lvl_list        <- unique(feature_taxonomy[, taxon_rank])
   new_abund_table <- NULL
   for (i in lvl_list) {
-    feat_idx <- rownames(OTU_taxonomy)[OTU_taxonomy[, which_level] == i]
+    feat_idx <- rownames(feature_taxonomy)[feature_taxonomy[, taxon_rank] == i]
     feat_idx <- intersect(feat_idx, colnames(abund_table))
     if (length(feat_idx) == 0) next
     col_name <- if (is.na(i) || i == "") "__Unknowns__" else i
@@ -258,7 +258,7 @@ if (which_level == "Otus") {
     new_abund_table <- if (is.null(new_abund_table)) tmp else cbind(new_abund_table, tmp)
   }
   if (is.null(new_abund_table))
-    stop("No features could be collated at level '", which_level, "'.")
+    stop("No features could be collated at level '", taxon_rank, "'.")
 }
 
 abund_table <- as.matrix(new_abund_table)
@@ -373,7 +373,7 @@ if (!is.null(meta_table$Type))
 wide_df <- cbind(sample = rownames(wide_df), wide_df)
 
 wide_csv <- file.path(opt$output_dir,
-  paste0("Diversity_", which_level, "_", opt$label, ".csv"))
+  paste0("Diversity_", taxon_rank, "_", opt$label, ".csv"))
 write.csv(wide_df, wide_csv, row.names = FALSE)
 message("Wrote wide CSV: ", wide_csv)
 
@@ -391,7 +391,7 @@ long_cols <- c("sample", "value", "measure", "Groups")
 if (!is.null(meta_table$Type)) long_cols <- c(long_cols, "Type")
 
 long_csv <- file.path(opt$output_dir,
-  paste0("Diversity_long_", which_level, "_", opt$label, ".csv"))
+  paste0("Diversity_long_", taxon_rank, "_", opt$label, ".csv"))
 write.csv(df_long[, long_cols, drop = FALSE], long_csv, row.names = FALSE)
 message("Wrote long CSV: ", long_csv)
 
@@ -403,7 +403,7 @@ group_levels    <- levels(meta_table$Groups)
 n_groups        <- length(group_levels)
 
 pw_csv <- file.path(opt$output_dir,
-  paste0("Diversity_pairwise_", which_level, "_", opt$label, ".csv"))
+  paste0("Diversity_pairwise_", taxon_rank, "_", opt$label, ".csv"))
 
 if (opt$test_method == "none" || n_groups < 2) {
   if (opt$test_method == "none") {
