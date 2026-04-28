@@ -105,13 +105,17 @@
                     "type": "string",
                     "default": "",
                     "description": "One metadata column, or comma-separated columns to paste together as the group label.",
-                    "fa_icon": "fas fa-layer-group"
+                    "fa_icon": "fas fa-layer-group",
+                    "x-csv-columns-from": "meta_table",
+                    "x-csv-columns-multiple": true
                 },
                 "type": {
                     "type": "string",
                     "default": "",
                     "description": "One metadata column, or comma-separated columns to paste together as the point-style label (optional).",
-                    "fa_icon": "fas fa-shapes"
+                    "fa_icon": "fas fa-shapes",
+                    "x-csv-columns-from": "meta_table",
+                    "x-csv-columns-multiple": true
                 }
             }
         },
