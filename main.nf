@@ -17,6 +17,7 @@ process ALPHA_DIVERSITY {
 
     input:
     tuple val(meta), path(feature_table), path(meta_table)
+    path taxonomy_table
     path tree_file   // accepted for API consistency; not used by R script
 
     output:
@@ -25,7 +26,7 @@ process ALPHA_DIVERSITY {
     path "Diversity_pairwise_${params.taxon_rank}_${params.label}.csv", emit: pairwise_csv
 
     script:
-    def tax_arg      = params.taxonomy_table ? "--taxonomy_table '${params.taxonomy_table}'" : ""
+    def tax_arg      = (taxonomy_table.name != 'NO_TAXONOMY') ? "--taxonomy_table '${taxonomy_table}'" : ""
     def excl_col_arg = params.exclude_column ? "--exclude_column '${params.exclude_column}'" : ""
     def excl_val_arg = params.exclude_values ? "--exclude_values '${params.exclude_values}'" : ""
     def grp_arg      = params.group          ? "--group '${params.group}'"                   : ""
@@ -37,7 +38,7 @@ process ALPHA_DIVERSITY {
         --meta_table      '${meta_table}'                \\
         --input_format    '${params.input_format}'       \\
         --output_dir      '.'                            \\
-        --taxon_rank     '${params.taxon_rank}'        \\
+        --taxon_rank     '${params.taxon_rank}'          \\
         --label           '${params.label}'              \\
         --min_library_size ${params.min_library_size}    \\
         --alpha_metrics   '${params.alpha_metrics}'      \\
@@ -86,12 +87,17 @@ workflow {
               file(params.meta_table,    checkIfExists: true))
     )
 
+    // Optional taxonomy table (staged into work dir for S3 compatibility)
+    ch_tax = (params.taxonomy_table && params.taxonomy_table != "")
+        ? Channel.fromPath(params.taxonomy_table, checkIfExists: true).first()
+        : Channel.value(file("NO_TAXONOMY"))
+
     // Optional tree file (null path if not provided)
     ch_tree = params.tree_file
         ? Channel.fromPath(params.tree_file, checkIfExists: true)
         : Channel.value(file("NO_FILE"))
 
-    ad_out = ALPHA_DIVERSITY(ch_inputs, ch_tree)
+    ad_out = ALPHA_DIVERSITY(ch_inputs, ch_tax, ch_tree)
 
     if (params.merge_parquet) {
         all_csvs = ad_out.diversity_wide
