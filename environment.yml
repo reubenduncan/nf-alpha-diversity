@@ -11,8 +11,12 @@ dependencies:
   - r-stringr
   - r-data.table
   - r-vegan
-  - bioconductor-phyloseq
+  - bioconductor-biomformat
+  - r-ape
+  - r-picante
+  - r-car
   - r-arrow
 
   # Pipeline orchestration
   - nextflow>=23.04
+

@@ -6,7 +6,6 @@
 
 suppressPackageStartupMessages({
   library(optparse)
-  library(phyloseq)
   library(stringr)
   library(data.table)
   library(vegan)
@@ -42,14 +41,16 @@ option_list <- list(
               help = "Path to metadata CSV [required]"),
   make_option("--taxonomy_table",   type = "character", default = "",
               help = "Path to taxonomy TSV (required if input_format is tsv or gtdb)"),
+  make_option("--tree_file",        type = "character", default = "",
+              help = "Path to Newick tree file (required for FaithsPD metric)"),
   make_option("--input_format",     type = "character", default = "biom",
               help = "Input format: biom | tsv | gtdb [default: biom]"),
   make_option("--output_dir",       type = "character", default = ".",
               help = "Output directory [default: .]"),
 
   # Filtering
-  make_option("--taxon_rank",      type = "character", default = "Phylum",
-              help = "Taxonomy level: Feature Genus Family Order Class Phylum [default: Phylum]"),
+  make_option("--taxon_rank",       type = "character", default = "Feature",
+              help = "Taxonomy level: Feature Genus Family Order Class Phylum [default: Feature]"),
   make_option("--label",            type = "character", default = "analysis",
               help = "Analysis label used in output filenames [default: analysis]"),
   make_option("--min_library_size", type = "integer",   default = 5000L,
@@ -65,12 +66,19 @@ option_list <- list(
   make_option("--type",  type = "character", default = "",
               help = "One metadata column, or comma-separated columns to paste as the point-style label (optional)"),
 
+  # Normalization
+  make_option("--normalization",    type = "character", default = "clr",
+              help = "clr (default): proportion-based, no rarefaction. rarefaction: subsample to min_library_size."),
+
   # Alpha diversity
   make_option("--alpha_metrics",    type = "character",
-              default = "Richness,Shannon,Simpson,FisherAlpha,PielouEvenness",
-              help = "Comma-separated metrics: Richness,Shannon,Simpson,FisherAlpha,PielouEvenness,Chao1,InvSimpson"),
+              default = "Richness,Shannon,GiniSimpson,FisherAlpha,PielouEvenness",
+              help = paste0("Comma-separated metrics: Richness,Shannon,GiniSimpson,InvSimpson,",
+                            "FisherAlpha,PielouEvenness,Chao1,FaithsPD")),
   make_option("--test_method",      type = "character", default = "anova",
-              help = "Statistical test: anova | kruskal | none [default: anova]"),
+              help = paste0("Statistical test: anova | kruskal | none | auto [default: anova]. ",
+                            "auto runs Levene's test (Brown-Forsythe) per metric and selects kruskal ",
+                            "when variances are heterogeneous (p<=0.05), anova otherwise.")),
   make_option("--p_adjust_method",  type = "character", default = "BH",
               help = "P-value adjustment: BH | bonferroni | holm | fdr | none [default: BH]")
 )
@@ -107,16 +115,19 @@ if (!opt$taxon_rank %in% valid_levels)
   stop("--taxon_rank must be one of: ", paste(valid_levels, collapse = ", "),
        ". Got: ", opt$taxon_rank)
 
-valid_metrics <- c("Richness", "Shannon", "Simpson", "FisherAlpha",
-                   "PielouEvenness", "Chao1", "InvSimpson")
+if (!opt$normalization %in% c("clr", "rarefaction"))
+  stop("--normalization must be 'clr' or 'rarefaction'. Got: ", opt$normalization)
+
+valid_metrics <- c("Richness", "Shannon", "GiniSimpson", "InvSimpson",
+                   "FisherAlpha", "PielouEvenness", "Chao1", "FaithsPD")
 requested_metrics <- trimws(strsplit(opt$alpha_metrics, ",")[[1]])
 bad_metrics <- setdiff(requested_metrics, valid_metrics)
 if (length(bad_metrics) > 0)
   stop("Unknown alpha metrics: ", paste(bad_metrics, collapse = ", "),
        ". Valid options: ", paste(valid_metrics, collapse = ", "))
 
-if (!opt$test_method %in% c("anova", "kruskal", "none"))
-  stop("--test_method must be one of: anova, kruskal, none. Got: ", opt$test_method)
+if (!opt$test_method %in% c("anova", "kruskal", "none", "auto"))
+  stop("--test_method must be one of: anova, kruskal, none, auto. Got: ", opt$test_method)
 
 valid_adjust <- c("BH", "bonferroni", "holm", "fdr", "none")
 if (!opt$p_adjust_method %in% valid_adjust)
@@ -129,6 +140,23 @@ if (!dir.exists(opt$output_dir)) {
 }
 
 # ---------------------------------------------------------------------------
+# Load phylogenetic tree (required only for FaithsPD)
+# ---------------------------------------------------------------------------
+tree <- NULL
+tree_path <- opt$tree_file
+if (!is.null(tree_path) && nchar(tree_path) > 0 &&
+    tree_path != "NO_FILE" && file.exists(tree_path)) {
+  message("Loading phylogenetic tree: ", tree_path)
+  tree <- tryCatch(
+    ape::read.tree(tree_path),
+    error = function(e) stop("Failed to read tree file: ", conditionMessage(e))
+  )
+}
+
+if ("FaithsPD" %in% requested_metrics && is.null(tree))
+  stop("FaithsPD metric requires --tree_file to be provided.")
+
+# ---------------------------------------------------------------------------
 # DATA IMPORT via shared helper
 # ---------------------------------------------------------------------------
 message("Loading feature table (format=", opt$input_format, ") ...")
@@ -138,7 +166,7 @@ loaded <- load_feature_table(
   input_format   = opt$input_format,
   taxonomy_table = tax_tbl_arg
 )
-abund_table  <- loaded$abund_table   # samples x features
+abund_table      <- loaded$abund_table       # samples x features
 feature_taxonomy <- loaded$feature_taxonomy  # features x 7
 
 # ---------------------------------------------------------------------------
@@ -167,7 +195,7 @@ if (nrow(abund_table) < 2)
        opt$min_library_size, "). Cannot continue.")
 
 # Remove zero-count features
-abund_table  <- abund_table[, colSums(abund_table) > 0, drop = FALSE]
+abund_table      <- abund_table[, colSums(abund_table) > 0, drop = FALSE]
 feature_taxonomy <- feature_taxonomy[colnames(abund_table), , drop = FALSE]
 
 # ---------------------------------------------------------------------------
@@ -182,7 +210,7 @@ abund_table <- abund_table[common_samps, , drop = FALSE]
 meta_table  <- meta_table[common_samps, , drop = FALSE]
 
 # Remove any features that are now zero across retained samples
-abund_table  <- abund_table[, colSums(abund_table) > 0, drop = FALSE]
+abund_table      <- abund_table[, colSums(abund_table) > 0, drop = FALSE]
 feature_taxonomy <- feature_taxonomy[colnames(abund_table), , drop = FALSE]
 
 # ---------------------------------------------------------------------------
@@ -232,8 +260,8 @@ if (opt$type != "") {
   meta_table$Type <- NULL
 }
 
-abund_table  <- abund_table[rownames(meta_table), , drop = FALSE]
-abund_table  <- abund_table[, colSums(abund_table) > 0, drop = FALSE]
+abund_table      <- abund_table[rownames(meta_table), , drop = FALSE]
+abund_table      <- abund_table[, colSums(abund_table) > 0, drop = FALSE]
 feature_taxonomy <- feature_taxonomy[colnames(abund_table), , drop = FALSE]
 
 # ---------------------------------------------------------------------------
@@ -267,84 +295,129 @@ storage.mode(abund_table) <- "numeric"
 # ---------------------------------------------------------------------------
 # DIVERSITY CALCULATIONS
 # ---------------------------------------------------------------------------
+message("Normalization mode: ", opt$normalization)
 message("Computing alpha diversity metrics: ", paste(requested_metrics, collapse = ", "))
+
+# Faith's PD helper — only called when tree is available
+compute_faiths_pd <- function(mat, tr) {
+  if (!requireNamespace("picante", quietly = TRUE))
+    stop("Package 'picante' is required for FaithsPD.")
+  common <- intersect(colnames(mat), tr$tip.label)
+  if (length(common) < 2)
+    stop("Fewer than 2 features are shared between the feature table and the tree. ",
+         "Check that feature IDs match tree tip labels.")
+  mat_pruned  <- mat[, common, drop = FALSE]
+  tree_pruned <- ape::keep.tip(tr, common)
+  pd_res      <- picante::pd(mat_pruned, tree_pruned, include.root = TRUE)
+  setNames(pd_res$PD, rownames(mat))
+}
 
 metric_frames <- list()
 
-compute_richness <- function(mat) {
-  tryCatch(
-    vegan::rarefy(mat, min(rowSums(mat))),
-    error = function(e) {
-      message("Warning: Richness (rarefy) failed: ", conditionMessage(e))
-      setNames(rep(NA_real_, nrow(mat)), rownames(mat))
-    }
-  )
-}
-
-compute_shannon <- function(mat) {
-  tryCatch(vegan::diversity(mat, index = "shannon"),
-           error = function(e) {
-             message("Warning: Shannon failed: ", conditionMessage(e))
-             setNames(rep(NA_real_, nrow(mat)), rownames(mat))
-           })
-}
-
-compute_simpson <- function(mat) {
-  tryCatch(vegan::diversity(mat, index = "simpson"),
-           error = function(e) {
-             message("Warning: Simpson failed: ", conditionMessage(e))
-             setNames(rep(NA_real_, nrow(mat)), rownames(mat))
-           })
-}
-
-compute_invsimpson <- function(mat) {
-  tryCatch(vegan::diversity(mat, index = "invsimpson"),
-           error = function(e) {
-             message("Warning: InvSimpson failed: ", conditionMessage(e))
-             setNames(rep(NA_real_, nrow(mat)), rownames(mat))
-           })
-}
-
-compute_fisher <- function(mat) {
-  tryCatch(vegan::fisher.alpha(mat),
-           error = function(e) {
-             message("Warning: FisherAlpha failed: ", conditionMessage(e))
-             setNames(rep(NA_real_, nrow(mat)), rownames(mat))
-           })
-}
-
-compute_chao1 <- function(mat) {
-  tryCatch({
-    est <- vegan::estimateR(mat)
-    est["S.chao1", ]
-  }, error = function(e) {
-    message("Warning: Chao1 failed: ", conditionMessage(e))
-    setNames(rep(NA_real_, nrow(mat)), rownames(mat))
-  })
-}
-
-# Pre-compute Shannon for Pielou (shared)
+# Pre-compute Shannon once (reused by PielouEvenness)
 shannon_vals <- NULL
 
 for (metric in requested_metrics) {
   vals <- switch(metric,
-    Richness      = compute_richness(abund_table),
-    Shannon       = { shannon_vals <<- compute_shannon(abund_table); shannon_vals },
-    Simpson       = compute_simpson(abund_table),
-    InvSimpson    = compute_invsimpson(abund_table),
-    FisherAlpha   = compute_fisher(abund_table),
-    Chao1         = compute_chao1(abund_table),
+
+    Richness = {
+      if (opt$normalization == "clr") {
+        # Observed richness: no rarefaction, no data loss
+        tryCatch(
+          vegan::specnumber(abund_table),
+          error = function(e) {
+            message("Warning: Richness (specnumber) failed: ", conditionMessage(e))
+            setNames(rep(NA_real_, nrow(abund_table)), rownames(abund_table))
+          }
+        )
+      } else {
+        tryCatch(
+          vegan::rarefy(abund_table, opt$min_library_size),
+          error = function(e) {
+            message("Warning: Richness (rarefy) failed: ", conditionMessage(e))
+            setNames(rep(NA_real_, nrow(abund_table)), rownames(abund_table))
+          }
+        )
+      }
+    },
+
+    Shannon = {
+      tryCatch({
+        # vegan::diversity normalises to proportions internally; scale-invariant
+        shannon_vals <<- vegan::diversity(abund_table, index = "shannon")
+        shannon_vals
+      }, error = function(e) {
+        message("Warning: Shannon failed: ", conditionMessage(e))
+        setNames(rep(NA_real_, nrow(abund_table)), rownames(abund_table))
+      })
+    },
+
+    # vegan computes Gini-Simpson = 1 - sum(p^2), NOT the raw Simpson D = sum(p^2)
+    GiniSimpson = {
+      tryCatch(
+        vegan::diversity(abund_table, index = "simpson"),
+        error = function(e) {
+          message("Warning: GiniSimpson failed: ", conditionMessage(e))
+          setNames(rep(NA_real_, nrow(abund_table)), rownames(abund_table))
+        }
+      )
+    },
+
+    InvSimpson = {
+      tryCatch(
+        vegan::diversity(abund_table, index = "invsimpson"),
+        error = function(e) {
+          message("Warning: InvSimpson failed: ", conditionMessage(e))
+          setNames(rep(NA_real_, nrow(abund_table)), rownames(abund_table))
+        }
+      )
+    },
+
+    FisherAlpha = {
+      tryCatch(
+        vegan::fisher.alpha(abund_table),
+        error = function(e) {
+          message("Warning: FisherAlpha failed: ", conditionMessage(e))
+          setNames(rep(NA_real_, nrow(abund_table)), rownames(abund_table))
+        }
+      )
+    },
+
+    Chao1 = {
+      tryCatch({
+        est <- vegan::estimateR(abund_table)
+        est["S.chao1", ]
+      }, error = function(e) {
+        message("Warning: Chao1 failed: ", conditionMessage(e))
+        setNames(rep(NA_real_, nrow(abund_table)), rownames(abund_table))
+      })
+    },
+
     PielouEvenness = {
-      if (is.null(shannon_vals)) shannon_vals <<- compute_shannon(abund_table)
-      S <- vegan::specnumber(abund_table)
-      tryCatch(shannon_vals / log(S),
-               error = function(e) {
-                 message("Warning: PielouEvenness failed: ", conditionMessage(e))
-                 setNames(rep(NA_real_, nrow(abund_table)), rownames(abund_table))
-               })
+      if (is.null(shannon_vals))
+        shannon_vals <<- vegan::diversity(abund_table, index = "shannon")
+      # Use per-sample observed richness as denominator (correct for any normalization)
+      obs_richness <- vegan::specnumber(abund_table)
+      tryCatch(
+        shannon_vals / log(obs_richness),
+        error = function(e) {
+          message("Warning: PielouEvenness failed: ", conditionMessage(e))
+          setNames(rep(NA_real_, nrow(abund_table)), rownames(abund_table))
+        }
+      )
+    },
+
+    FaithsPD = {
+      tryCatch(
+        compute_faiths_pd(abund_table, tree),
+        error = function(e) {
+          message("Warning: FaithsPD failed: ", conditionMessage(e))
+          setNames(rep(NA_real_, nrow(abund_table)), rownames(abund_table))
+        }
+      )
     }
   )
-  # Align names to abund_table rows
+
   vals_named <- setNames(as.numeric(vals), names(vals))
   metric_frames[[metric]] <- data.frame(
     sample  = rownames(abund_table),
@@ -366,10 +439,10 @@ for (metric in requested_metrics) {
   rownames(mf) <- mf$sample
   wide_df[[metric]] <- mf[rownames(wide_df), "value"]
 }
-wide_df$Groups <- meta_table[rownames(wide_df), "Groups"]
+wide_df$Groups        <- meta_table[rownames(wide_df), "Groups"]
+wide_df$normalization <- opt$normalization
 if (!is.null(meta_table$Type))
-  wide_df$Type  <- meta_table[rownames(wide_df), "Type"]
-# Add sample as explicit column (first col)
+  wide_df$Type <- meta_table[rownames(wide_df), "Type"]
 wide_df <- cbind(sample = rownames(wide_df), wide_df)
 
 wide_csv <- file.path(opt$output_dir,
@@ -382,7 +455,7 @@ message("Wrote wide CSV: ", wide_csv)
 # ---------------------------------------------------------------------------
 df_long$Groups <- meta_table[df_long$sample, "Groups"]
 if (!is.null(meta_table$Type))
-  df_long$Type  <- meta_table[df_long$sample, "Type"]
+  df_long$Type <- meta_table[df_long$sample, "Type"]
 
 # ---------------------------------------------------------------------------
 # CSV 2: Long diversity table
@@ -396,6 +469,20 @@ write.csv(df_long[, long_cols, drop = FALSE], long_csv, row.names = FALSE)
 message("Wrote long CSV: ", long_csv)
 
 # ---------------------------------------------------------------------------
+# Helper: Brown-Forsythe Levene test (median-based, no extra dependencies)
+# Returns p-value from one-way ANOVA on absolute deviations from group medians
+# ---------------------------------------------------------------------------
+levene_pval <- function(values, groups) {
+  groups <- factor(groups)
+  grp_med <- tapply(values, groups, median, na.rm = TRUE)
+  abs_dev <- abs(values - grp_med[as.character(groups)])
+  tryCatch(
+    summary(aov(abs_dev ~ groups))[[1]][["Pr(>F)"]][1],
+    error = function(e) NA_real_
+  )
+}
+
+# ---------------------------------------------------------------------------
 # CSV 3: Pairwise tests
 # ---------------------------------------------------------------------------
 grouping_column <- "Groups"
@@ -405,103 +492,149 @@ n_groups        <- length(group_levels)
 pw_csv <- file.path(opt$output_dir,
   paste0("Diversity_pairwise_", taxon_rank, "_", opt$label, ".csv"))
 
+empty_pw <- data.frame(
+  measure            = character(),
+  group1             = character(),
+  group2             = character(),
+  estimate           = numeric(),
+  conf_low           = numeric(),
+  conf_high          = numeric(),
+  pvalue             = numeric(),
+  padj               = numeric(),
+  significance       = character(),
+  test_method        = character(),
+  actual_test_method = character(),
+  levene_pvalue      = numeric(),
+  stringsAsFactors   = FALSE
+)
+
 if (opt$test_method == "none" || n_groups < 2) {
   if (opt$test_method == "none") {
     message("test_method='none' — skipping pairwise tests.")
   } else {
     message("Warning: Only ", n_groups, " group(s) found — skipping pairwise tests.")
   }
-  empty_pw <- data.frame(
-    measure     = character(),
-    group1      = character(),
-    group2      = character(),
-    pvalue      = numeric(),
-    padj        = numeric(),
-    significance = character(),
-    test_method = character(),
-    stringsAsFactors = FALSE
-  )
   write.csv(empty_pw, pw_csv, row.names = FALSE)
   message("Wrote empty pairwise CSV: ", pw_csv)
 } else {
-  s       <- combn(group_levels, 2)
   pw_rows <- list()
 
   for (k in requested_metrics) {
-    for (l in seq_len(ncol(s))) {
-      g1  <- s[1, l]
-      g2  <- s[2, l]
-      sub <- df_long[df_long$measure == k &
-                     df_long[[grouping_column]] %in% c(g1, g2), ]
-      sub <- sub[!is.na(sub$value), ]
+    levene_p      <- NA_real_
+    actual_method <- opt$test_method
 
-      # Check each group has >= 2 samples
-      counts <- table(sub[[grouping_column]])
-      thin_groups <- names(counts[counts < 2])
-      if (length(thin_groups) > 0) {
-        message("Warning: Skipping pair (", g1, " vs ", g2, ") for metric '",
-                k, "' — group(s) ", paste(thin_groups, collapse = ", "),
-                " have fewer than 2 samples.")
-        pw_rows[[length(pw_rows) + 1]] <- data.frame(
-          measure      = k,
-          group1       = g1,
-          group2       = g2,
-          pvalue       = NA_real_,
-          padj         = NA_real_,
-          significance = "insufficient_data",
-          test_method  = opt$test_method,
-          stringsAsFactors = FALSE
-        )
-        next
-      }
+    if (opt$test_method == "auto") {
+      df_all   <- df_long[df_long$measure == k & !is.na(df_long$value), ]
+      levene_p <- levene_pval(df_all$value, df_all[[grouping_column]])
+      actual_method <- if (!is.na(levene_p) && levene_p <= 0.05) "kruskal" else "anova"
+      message("  Metric '", k, "': Levene p=", sprintf("%.4g", levene_p),
+              " — using ", actual_method)
+    }
 
-      pv <- tryCatch({
-        if (opt$test_method == "anova") {
-          summary(aov(
-            as.formula(paste("value ~", grouping_column)),
-            data = sub
-          ))[[1]][["Pr(>F)"]][1]
-        } else {
-          # kruskal
-          kt <- kruskal.test(
-            as.formula(paste("value ~", grouping_column)),
-            data = sub
+    if (actual_method == "anova" && n_groups >= 2) {
+      # Tukey HSD: standard post-hoc for ANOVA, controls family-wise error rate
+      df_met <- df_long[df_long$measure == k & !is.na(df_long$value), ]
+      df_met[[grouping_column]] <- factor(df_met[[grouping_column]])
+
+      tryCatch({
+        fit     <- aov(as.formula(paste("value ~", grouping_column)), data = df_met)
+        tukey   <- TukeyHSD(fit, which = grouping_column)[[grouping_column]]
+        for (row_nm in rownames(tukey)) {
+          parts <- strsplit(row_nm, "-")[[1]]
+          # TukeyHSD names are "b-a" (second minus first); swap to g1 vs g2 convention
+          g1 <- trimws(parts[2])
+          g2 <- trimws(parts[1])
+          pw_rows[[length(pw_rows) + 1]] <- data.frame(
+            measure            = k,
+            group1             = g1,
+            group2             = g2,
+            estimate           = tukey[row_nm, "diff"],
+            conf_low           = tukey[row_nm, "lwr"],
+            conf_high          = tukey[row_nm, "upr"],
+            pvalue             = tukey[row_nm, "p adj"],
+            padj               = tukey[row_nm, "p adj"],  # already adjusted
+            significance       = "",
+            test_method        = opt$test_method,
+            actual_test_method = actual_method,
+            levene_pvalue      = levene_p,
+            stringsAsFactors   = FALSE
           )
-          kt$p.value
         }
       }, error = function(e) {
-        message("Warning: Statistical test failed for metric '", k,
-                "' pair (", g1, " vs ", g2, "): ", conditionMessage(e))
-        NA_real_
+        message("Warning: TukeyHSD failed for metric '", k, "': ", conditionMessage(e))
       })
 
-      pw_rows[[length(pw_rows) + 1]] <- data.frame(
-        measure      = k,
-        group1       = g1,
-        group2       = g2,
-        pvalue       = pv,
-        padj         = NA_real_,   # filled below
-        significance = "",
-        test_method  = opt$test_method,
-        stringsAsFactors = FALSE
-      )
+    } else if (actual_method == "kruskal") {
+      # Kruskal-Wallis: pairwise Mann-Whitney U with p-value correction
+      s <- combn(group_levels, 2)
+
+      for (l in seq_len(ncol(s))) {
+        g1  <- s[1, l]
+        g2  <- s[2, l]
+        sub <- df_long[df_long$measure == k &
+                       df_long[[grouping_column]] %in% c(g1, g2), ]
+        sub <- sub[!is.na(sub$value), ]
+
+        counts      <- table(sub[[grouping_column]])
+        thin_groups <- names(counts[counts < 2])
+        if (length(thin_groups) > 0) {
+          message("Warning: Skipping pair (", g1, " vs ", g2, ") for metric '", k,
+                  "' — group(s) ", paste(thin_groups, collapse = ", "),
+                  " have fewer than 2 samples.")
+          pw_rows[[length(pw_rows) + 1]] <- data.frame(
+            measure = k, group1 = g1, group2 = g2,
+            estimate = NA_real_, conf_low = NA_real_, conf_high = NA_real_,
+            pvalue = NA_real_, padj = NA_real_,
+            significance = "insufficient_data",
+            test_method = opt$test_method, actual_test_method = actual_method,
+            levene_pvalue = levene_p, stringsAsFactors = FALSE
+          )
+          next
+        }
+
+        pv <- tryCatch(
+          kruskal.test(
+            as.formula(paste("value ~", grouping_column)),
+            data = sub
+          )$p.value,
+          error = function(e) {
+            message("Warning: Kruskal test failed for metric '", k,
+                    "' pair (", g1, " vs ", g2, "): ", conditionMessage(e))
+            NA_real_
+          }
+        )
+
+        pw_rows[[length(pw_rows) + 1]] <- data.frame(
+          measure = k, group1 = g1, group2 = g2,
+          estimate = NA_real_, conf_low = NA_real_, conf_high = NA_real_,
+          pvalue = pv, padj = NA_real_, significance = "",
+          test_method = opt$test_method, actual_test_method = actual_method,
+          levene_pvalue = levene_p, stringsAsFactors = FALSE
+        )
+      }
+
+      # Apply multiple-testing correction across all pairs for this metric
+      if (opt$p_adjust_method != "none" && length(pw_rows) > 0) {
+        k_rows <- sapply(pw_rows, function(r) r$measure == k)
+        raw_pv <- sapply(pw_rows[k_rows], function(r) r$pvalue)
+        adj_pv <- p.adjust(raw_pv, method = opt$p_adjust_method)
+        idx    <- which(k_rows)
+        for (j in seq_along(idx)) pw_rows[[idx[j]]]$padj <- adj_pv[j]
+      } else {
+        for (j in seq_along(pw_rows)) {
+          if (pw_rows[[j]]$measure == k)
+            pw_rows[[j]]$padj <- pw_rows[[j]]$pvalue
+        }
+      }
     }
   }
 
-  df_pairwise <- do.call(rbind, pw_rows)
-
-  # P-value adjustment (per metric, across all pairs)
-  if (opt$p_adjust_method != "none" && nrow(df_pairwise) > 0) {
-    for (k in unique(df_pairwise$measure)) {
-      idx <- df_pairwise$measure == k
-      raw <- df_pairwise$pvalue[idx]
-      df_pairwise$padj[idx] <- p.adjust(raw, method = opt$p_adjust_method)
-    }
+  if (length(pw_rows) == 0) {
+    df_pairwise <- empty_pw
   } else {
-    df_pairwise$padj <- df_pairwise$pvalue
+    df_pairwise <- do.call(rbind, pw_rows)
   }
 
-  # Significance stars (based on padj)
   sig_label <- function(p) {
     if (is.na(p)) return("")
     if (p <= 0.001) "***"
@@ -513,6 +646,60 @@ if (opt$test_method == "none" || n_groups < 2) {
 
   write.csv(df_pairwise, pw_csv, row.names = FALSE)
   message("Wrote pairwise CSV: ", pw_csv)
+}
+
+# ---------------------------------------------------------------------------
+# CSV 4: Per-group sample counts
+# ---------------------------------------------------------------------------
+n_csv <- file.path(opt$output_dir,
+  paste0("Diversity_n_", taxon_rank, "_", opt$label, ".csv"))
+n_df  <- as.data.frame(table(Groups = meta_table$Groups),
+                        stringsAsFactors = FALSE)
+colnames(n_df) <- c("Groups", "n")
+write.csv(n_df, n_csv, row.names = FALSE)
+message("Wrote n CSV: ", n_csv)
+
+# ---------------------------------------------------------------------------
+# CSV 5: Two-way ANOVA (Groups * Type) — only when --type was provided
+# Note: exploratory only; no post-hoc for interaction term is computed.
+# ---------------------------------------------------------------------------
+if (!is.null(meta_table$Type) && opt$test_method != "none") {
+  tw_csv <- file.path(opt$output_dir,
+    paste0("Diversity_twoway_", taxon_rank, "_", opt$label, ".csv"))
+  tw_rows <- list()
+
+  for (k in requested_metrics) {
+    df_sub <- df_long[df_long$measure == k & !is.na(df_long$value), ]
+    df_sub[[grouping_column]] <- factor(df_sub[[grouping_column]])
+    df_sub$Type               <- factor(df_sub$Type)
+
+    tryCatch({
+      fit <- aov(
+        as.formula(paste("value ~", grouping_column, "* Type")),
+        data = df_sub
+      )
+      tbl <- summary(fit)[[1]]
+      for (term in rownames(tbl)) {
+        tw_rows[[length(tw_rows) + 1]] <- data.frame(
+          measure  = k,
+          term     = trimws(term),
+          df       = tbl[term, "Df"],
+          sum_sq   = tbl[term, "Sum Sq"],
+          mean_sq  = tbl[term, "Mean Sq"],
+          f_value  = tbl[term, "F value"],
+          pvalue   = tbl[term, "Pr(>F)"],
+          stringsAsFactors = FALSE
+        )
+      }
+    }, error = function(e) {
+      message("Warning: Two-way ANOVA failed for metric '", k, "': ", conditionMessage(e))
+    })
+  }
+
+  if (length(tw_rows) > 0) {
+    write.csv(do.call(rbind, tw_rows), tw_csv, row.names = FALSE)
+    message("Wrote two-way ANOVA CSV: ", tw_csv)
+  }
 }
 
 message("Alpha diversity analysis complete.")

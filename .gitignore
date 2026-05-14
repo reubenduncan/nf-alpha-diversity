@@ -2,3 +2,15 @@
 work/
 output/
 results/
+.DS_Store
+
+# Generated pipeline reports (written to output_dir, not source)
+pipeline_report.html
+pipeline_trace.txt
+pipeline_timeline.html
+pipeline_manifest.json
+r_session_info.txt
+
+# Stale root-level output files (should live in results/ only)
+*.pdf
+alpha_diversity.R

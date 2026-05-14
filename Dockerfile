@@ -20,16 +20,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Install CRAN packages
 RUN Rscript -e "\
     install.packages( \
-        c('optparse', 'stringr', 'data.table', 'vegan'), \
+        c('optparse', 'stringr', 'data.table', 'vegan', 'ape', 'car'), \
         repos = 'https://cloud.r-project.org', \
         Ncpus = max(1L, parallel::detectCores() - 1L) \
     )"
 
-# Install Bioconductor + phyloseq
+# Install Bioconductor packages (biomformat for BIOM I/O; picante for Faith's PD)
 RUN Rscript -e "\
     if (!requireNamespace('BiocManager', quietly = TRUE)) \
         install.packages('BiocManager', repos = 'https://cloud.r-project.org'); \
-    BiocManager::install('phyloseq', ask = FALSE, update = FALSE)"
+    BiocManager::install(c('biomformat', 'picante'), ask = FALSE, update = FALSE)"
 
 # Install arrow (pre-built C++ library; LIBARROW_BINARY avoids 30-min source compile)
 RUN LIBARROW_BINARY=true Rscript -e "\
@@ -42,7 +42,8 @@ COPY src/ /opt/ecology-scripts/src/
 # Verify all required packages load cleanly
 RUN Rscript -e "\
     library(optparse); library(stringr); library(data.table); \
-    library(vegan); library(phyloseq); library(arrow); \
+    library(vegan); library(biomformat); library(ape); library(picante); \
+    library(car); library(arrow); \
     message('All packages loaded successfully.')"
 
 WORKDIR /data

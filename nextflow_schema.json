@@ -1,7 +1,7 @@
 {
     "$schema": "http://json-schema.org/draft-07/schema",
     "$id": "https://github.com/reubenduncan/ecologyflow/tree/main/projects/alpha-diversity/nextflow-schema.json",
-    "title": "Alpha Diversity Pipeline \u2014 Parameters",
+    "title": "Alpha Diversity Pipeline — Parameters",
     "description": "Nextflow schema for the alpha diversity analysis pipeline.",
     "type": "object",
     "definitions": {
@@ -19,7 +19,7 @@
                     "type": "string",
                     "format": "file-path",
                     "description": "Path to the feature table. Accepted formats: BIOM (.biom), TSV, or GTDB TSV.",
-                    "help_text": "When input_format is 'biom' this must be a BIOM file. For 'tsv' or 'gtdb' this must be a tab-separated file with feature IDs as row names and sample IDs as column headers (or vice-versa \u2014 orientation is auto-detected).",
+                    "help_text": "When input_format is 'biom' this must be a BIOM file. For 'tsv' or 'gtdb' this must be a tab-separated file with feature IDs as row names and sample IDs as column headers (or vice-versa — orientation is auto-detected).",
                     "fa_icon": "fas fa-file"
                 },
                 "meta_table": {
@@ -34,15 +34,15 @@
                     "format": "file-path",
                     "default": "",
                     "description": "Path to a two-column TSV: col 1 = feature ID, col 2 = semicolon-separated taxonomy string.",
-                    "help_text": "Required when input_format is 'tsv' or 'gtdb'. Ignored when input_format is 'biom' (taxonomy is embedded). Supports SILVA (D_0__, D_1__, \u2026) and GTDB (d__, p__, \u2026) prefixes.",
+                    "help_text": "Required when input_format is 'tsv' or 'gtdb'. Ignored when input_format is 'biom' (taxonomy is embedded). Supports SILVA (D_0__, D_1__, …) and GTDB (d__, p__, …) prefixes.",
                     "fa_icon": "fas fa-list"
                 },
                 "tree_file": {
                     "type": "string",
                     "format": "file-path",
                     "default": "",
-                    "description": "Optional phylogenetic tree file. Accepted for API consistency but not used in alpha diversity calculations.",
-                    "help_text": "Provide a Newick-format tree if required by downstream workflows. Has no effect on current outputs.",
+                    "description": "Newick-format phylogenetic tree file. Required when FaithsPD is included in alpha_metrics.",
+                    "help_text": "Feature IDs in the tree must match feature IDs in the feature table. Only rooted trees are supported for Faith's PD.",
                     "fa_icon": "fas fa-tree"
                 },
                 "input_format": {
@@ -76,7 +76,7 @@
                     "default": 5000,
                     "minimum": 1,
                     "description": "Minimum total read count per sample. Samples below this threshold are dropped.",
-                    "help_text": "Set lower for low-depth datasets (e.g. 1000) or higher for strict quality control.",
+                    "help_text": "Set lower for low-depth datasets (e.g. 1000) or higher for strict quality control. Under normalization='rarefaction' this value is also used as the rarefaction depth.",
                     "fa_icon": "fas fa-sliders-h"
                 },
                 "exclude_column": {
@@ -123,13 +123,13 @@
             "title": "Alpha Diversity Options",
             "type": "object",
             "fa_icon": "fas fa-chart-bar",
-            "description": "Control taxonomy collation, metric selection, and statistical testing.",
+            "description": "Control taxonomy collation, normalization, metric selection, and statistical testing.",
             "properties": {
                 "taxon_rank": {
                     "type": "string",
-                    "default": "Phylum",
+                    "default": "Feature",
                     "description": "Taxonomic level at which features are collapsed before diversity calculation.",
-                    "help_text": "Use 'Feature' to work at the feature level with no collation.",
+                    "help_text": "Use 'Feature' to work at the ASV/OTU level with no collation. Higher ranks collapse counts by summing across all features in that rank.",
                     "enum": [
                         "Feature",
                         "Genus",
@@ -144,25 +144,37 @@
                     "type": "string",
                     "default": "analysis",
                     "description": "Label appended to output filenames. Must be a valid filename component.",
-                    "help_text": "Example: 'Hypothesis1' produces Diversity_Phylum_Hypothesis1.csv.",
+                    "help_text": "Example: 'Cohort1' produces Diversity_Feature_Cohort1.csv.",
                     "fa_icon": "fas fa-tag"
+                },
+                "normalization": {
+                    "type": "string",
+                    "default": "clr",
+                    "description": "Normalization strategy applied before diversity computation.",
+                    "help_text": "clr (default): proportion-based normalization. Richness = observed species count; Shannon/Simpson/InvSimpson/PielouEvenness are computed on proportions (scale-invariant). No data are discarded. rarefaction: subsample all samples to exactly min_library_size reads before computing all metrics.",
+                    "enum": [
+                        "clr",
+                        "rarefaction"
+                    ],
+                    "fa_icon": "fas fa-balance-scale"
                 },
                 "alpha_metrics": {
                     "type": "string",
-                    "default": "Richness,Shannon,Simpson,FisherAlpha,PielouEvenness",
+                    "default": "Richness,Shannon,GiniSimpson,FisherAlpha,PielouEvenness",
                     "description": "Comma-separated list of alpha diversity metrics to compute.",
-                    "help_text": "Available metrics: Richness (rarefied species richness via vegan::rarefy), Shannon (vegan::diversity index='shannon'), Simpson (vegan::diversity index='simpson'), InvSimpson (vegan::diversity index='invsimpson'), FisherAlpha (vegan::fisher.alpha), Chao1 (vegan::estimateR S.chao1), PielouEvenness (Shannon / ln(S)). Example: 'Shannon,Chao1,PielouEvenness'.",
+                    "help_text": "Richness: observed species count (clr) or rarefied richness at min_library_size (rarefaction). Shannon: -sum(p*log(p)). GiniSimpson: 1-sum(p^2) (note: NOT raw Simpson D=sum(p^2)). InvSimpson: 1/sum(p^2). FisherAlpha: parametric richness estimator. Chao1: non-parametric richness estimator (requires integer counts). PielouEvenness: Shannon/log(observed_richness). FaithsPD: Faith's phylogenetic diversity (requires --tree_file).",
                     "fa_icon": "fas fa-list-ol"
                 },
                 "test_method": {
                     "type": "string",
                     "default": "anova",
                     "description": "Statistical test used for pairwise group comparisons.",
-                    "help_text": "anova: one-way ANOVA (or within-subjects ANOVA when connections_column is set). kruskal: Kruskal-Wallis rank-sum test (non-parametric). none: skip statistical testing and write an empty pairwise CSV.",
+                    "help_text": "anova: one-way ANOVA with Tukey HSD post-hoc (controls family-wise error rate). kruskal: Kruskal-Wallis + pairwise Mann-Whitney U with p_adjust_method correction. none: skip testing. auto: run Levene's test per metric and choose anova (homogeneous variance) or kruskal (heterogeneous variance, Levene p<=0.05).",
                     "enum": [
                         "anova",
                         "kruskal",
-                        "none"
+                        "none",
+                        "auto"
                     ],
                     "fa_icon": "fas fa-flask"
                 },
@@ -170,7 +182,7 @@
                     "type": "string",
                     "default": "BH",
                     "description": "Method for multiple-testing correction of pairwise p-values.",
-                    "help_text": "Applied per metric across all pairwise comparisons using R's p.adjust(). BH (Benjamini-Hochberg) and fdr are equivalent. Use 'none' to report unadjusted p-values.",
+                    "help_text": "Applied per metric across all pairwise comparisons using R's p.adjust(). BH (Benjamini-Hochberg) and fdr are equivalent. Not applied for ANOVA mode (TukeyHSD already controls FWER). Use 'none' to report unadjusted p-values.",
                     "enum": [
                         "BH",
                         "bonferroni",
@@ -209,28 +221,30 @@
                     "description": "Merge all output CSVs into a single Parquet file with analysis and table metadata columns.",
                     "help_text": "Writes alpha_diversity_{label}.parquet to output_dir. Filter by 'analysis' and 'table' columns downstream.",
                     "fa_icon": "fas fa-file-archive"
+                },
+                "sensitivity_analysis": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Run sensitivity analysis at multiple rarefaction depths. Only active when normalization='rarefaction'.",
+                    "help_text": "Computes all requested metrics at each depth fraction in sensitivity_depths and writes Diversity_sensitivity_{taxon_rank}_{label}.csv. Has no effect when normalization='clr' (a warning is emitted).",
+                    "fa_icon": "fas fa-sliders-h"
+                },
+                "sensitivity_depths": {
+                    "type": "string",
+                    "default": "0.5,0.75,1.0",
+                    "description": "Comma-separated fractions of min_library_size used as rarefaction depths in the sensitivity analysis.",
+                    "help_text": "Each value must be a positive number. Only used when sensitivity_analysis=true and normalization=rarefaction.",
+                    "fa_icon": "fas fa-ruler-horizontal"
                 }
             }
         }
     },
     "allOf": [
-        {
-            "$ref": "#/definitions/input_output_options"
-        },
-        {
-            "$ref": "#/definitions/filtering_options"
-        },
-        {
-            "$ref": "#/definitions/grouping_options"
-        },
-        {
-            "$ref": "#/definitions/alpha_diversity_options"
-        },
-        {
-            "$ref": "#/definitions/institutional_config_options"
-        },
-        {
-            "$ref": "#/definitions/output_options"
-        }
+        { "$ref": "#/definitions/input_output_options" },
+        { "$ref": "#/definitions/filtering_options" },
+        { "$ref": "#/definitions/grouping_options" },
+        { "$ref": "#/definitions/alpha_diversity_options" },
+        { "$ref": "#/definitions/institutional_config_options" },
+        { "$ref": "#/definitions/output_options" }
     ]
 }
